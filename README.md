@@ -1,17 +1,26 @@
 # Flaip agent skills
 
-让 AI Agent 在 [Flaip](https://flaip.xyz)（BNB Chain）上创建代币和交易。
+English and Chinese guidance for launching, trading and claiming on [Flaip](https://flaip.xyz), BNB Chain. The Agent follows the user's language and preserves the same preview and confirmation rules.
 
 ```bash
 npx skills add Zephyr886/flaip-skills
 ```
 
-安装后对 Agent 说一句话即可，例如“在 Flaip 创建一个叫 Moon Cat 的代币，选 QQQB 底池，购买 0.5 BNB 的 QQQB 作为首购”或“用 0.1 BNB 买入这个 CA：0x…”。Agent 会一次问清缺少的选择，完成实时报价或钱包预览后合并确认，并自动跟进结果。BNB 预算兑换报价币后，以本次实际净到账数量完成首购；兑换、必要授权和创建各自预览/确认，已有订单不重复提交。
+## English
 
-迁移后 Agent 会主动检查并提醒持有钱包领取。直接说“领取代币 0x…”即可进入领取，或说“领取代币 0x… 到 0x收款钱包”。指定另一钱包时，现有合约采用先领取到持有钱包、再转出的两步流程，各自确认，转出仅限本次实际领取数量。
+After installation, try “Create a token named Moon Cat, use QQQB, and buy 0.5 BNB worth of QQQB for its initial purchase”, “Buy this CA with 0.1 BNB”, or “Claim tokens {CA} to {wallet}”. The Agent asks once for missing creation choices and does not make you convert the funding budget into quote-token units. A different claim destination requires a claim followed by a transfer, each previewed and confirmed separately.
 
-- 签名依赖币安 Agentic Wallet 技能：`npx skills add binance/binance-skills-hub --skill binance-agentic-wallet`，并在 Binance App 开启 Developer Mode。
-- 创建与内盘买卖需要钱包持有官方 .ai Agent ID。
-- 接口说明：https://flaip.xyz/api/agent ；完整指南：https://flaip.xyz/agent-skill.md
+- [English quick start](skills/flaip-launchpad/references/quickstart.en.md)
+- [Full English API reference](skills/flaip-launchpad/references/full-guide.md)
+- Website: https://flaip.xyz/?lang=en · Online guide: https://flaip.xyz/agent-quickstart.en.md
 
-本仓库由 Flaip 项目的 `scripts/build-skill-package.mjs` 生成，请勿手工修改。
+## 中文
+
+安装后直接告诉 Agent：“在 Flaip 创建 Moon Cat，选 QQQB 底池，购买 0.5 BNB 的 QQQB 作为首购”“用 0.1 BNB 买入这个 CA”或“领取代币 {CA} 到 {收款钱包}”。Agent 一次问清缺失选择，自动报价、预览并跟进；指定另一收款钱包时先领取、再转出，各自确认。
+
+- [中文快速指南](skills/flaip-launchpad/references/quickstart.zh-CN.md)
+- 官网：https://flaip.xyz/?lang=zh · 在线指南：https://flaip.xyz/agent-quickstart.md
+
+Both languages require the official Binance Agentic Wallet skill and Developer Mode for contract calls. Creation and curve trading require official .ai Agent ID. 安装语言版本不改变钱包、链、合约或授权规则。
+
+Generated from the Flaip project's deploy guides by `scripts/build-skill-package.mjs`; edit those source guides rather than generated files.

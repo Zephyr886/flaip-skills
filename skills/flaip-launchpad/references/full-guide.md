@@ -1,4 +1,4 @@
-# Flaip Agent guide
+# Flaip Agent guide · English
 
 API origin: `https://flaip.xyz`. BSC chain ID: **56**.
 
@@ -44,7 +44,7 @@ The official website follows `factoryPolicy=latest-verified`. Its server detects
 | Setting | Default | When to ask/change |
 | --- | --- | --- |
 | Slippage | **1%**, `100` bps; enforced by calldata `minOut` | Only when the user explicitly asks; valid override 0–500 bps, never auto-increase |
-| MEV preference | Protection preferred, but **current Binance `contract-call` does not expose a protection switch or verifiable protected route** | Say “当前内盘无法保证防夹，将普通提交” in the final confirmation and continue only after that confirmation. Do not show “MEV enabled”, invent a CLI flag or silently substitute a different route |
+| MEV preference | Protection preferred, but **current Binance `contract-call` does not expose a protection switch or verifiable protected route** | Say “MEV protection cannot be guaranteed on the bonding curve; this uses normal submission” in the final confirmation and continue only after that confirmation. Do not show “MEV enabled”, invent a CLI flag or silently substitute a different route |
 | Network fee | Let the wallet preview estimate automatically; omit Gas flags | No automatic speed-up or high-fee retry. A specific `gasLimit` is advanced and only sent when explicitly requested |
 | Inner platform fee | **0.2%** of executed buy and sell volume, in the pool's quote asset; unused payment is not charged | Contract-fixed, cannot be changed by a preference |
 | Buy amount / initial buy | Exact amount requested, or the actual quote tokens obtained with the user's BNB funding budget | Guide ERC20 initial buys in BNB-equivalent terms; resolve to quote-token units under section 3.1. Never invent an amount or spend unrelated holdings |
@@ -63,9 +63,9 @@ Ask only for missing information, together:
 
 - name (symbol may be derived in quick mode);
 - **avatar**: user-supplied image, a chosen built-in art name, or explicit acceptance of a recommendation (art=auto);
-- **Quote asset / 底池**: BNB, QQQB or BNCB; the inner market and the graduated Flap pair both use it;
-- **tax use**: marketing (金库收益), burn (自动销毁), dividend (持币分红) or liquidity (自动加池);
-- **initial purchase**: for BNB pools ask how much BNB; for QQQB/BNCB pools first offer a BNB-equivalent funding budget, e.g. “购买 0.5 BNB 的 QQQB 作为首购”. Also accept an exact amount from existing quote-token holdings, or explicit 0 for no purchase. Mention only the selected quote asset when it is already known.
+- **Pool quote asset**: BNB, QQQB or BNCB; the inner market and the graduated Flap pair both use it;
+- **tax use**: marketing (treasury income), burn (automatic burn), dividend (holder dividends) or liquidity (automatic liquidity);
+- **initial purchase**: for BNB pools ask how much BNB; for QQQB/BNCB pools first offer a BNB-equivalent funding budget, e.g. “Buy 0.5 BNB worth of QQQB for the initial purchase”. Also accept an exact amount from existing quote-token holdings, or explicit 0 for no purchase. Mention only the selected quote asset when it is already known.
 
 These decisions are required in both quick and exact modes. A name alone is not sufficient. Do not ask again when the user already supplied an answer, but never silently substitute a random avatar, BNB, marketing, or zero buy. Missing choices return LAUNCH_CHOICES_REQUIRED with missing/questions before uploads or transaction construction.
 
@@ -81,9 +81,9 @@ Read `economics` from `/api/agent` or `/api/preflight`. Earlier factories (0.5/0
 
 ### 3.1 BNB-equivalent initial purchase budgets
 
-Use the selected quote asset in the question: “你想购买多少 BNB 等值的 QQQB 用于首购？例如：购买 0.5 BNB 的 QQQB 作为首购；也可指定使用已有 QQQB 的数量，或不首购。” Substitute BNCB when selected. For BNB pools, a 0.5 BNB initial buy maps directly to `initialBuyAmount:"0.5"` without a funding swap.
+Use the selected quote asset in the question: “How much BNB worth of QQQB would you like to acquire for the initial purchase? For example, buy 0.5 BNB worth of QQQB for the initial purchase. You can also specify existing QQQB or choose no purchase.” Substitute BNCB when selected. For BNB pools, a 0.5 BNB initial buy maps directly to `initialBuyAmount:"0.5"` without a funding swap.
 
-“购买 0.5 BNB 的 QQQB 作为首购” means spend 0.5 BNB to acquire QQQB, then use the actual net QQQB received as the initial purchase budget. It already specifies a positive initial purchase, source asset, budget and destination asset. Do not ask these again or silently replace the requested acquisition with existing holdings. “用已有 2 QQQB 首购” uses exactly 2 QQQB without swapping. For “用已有 QQQB 按 0.5 BNB 等值首购”, use a fresh wallet quote as the conversion reference and show the exact QQQB amount in the creation confirmation; do not spend BNB. A bare BNB-equivalent budget without an acquisition/existing-holdings instruction needs that funding-source question, combined with other missing decisions.
+“Buy 0.5 BNB worth of QQQB for the initial purchase” means spend 0.5 BNB to acquire QQQB, then use the actual net QQQB received as the initial purchase budget. It already specifies a positive initial purchase, source asset, budget and destination asset. Do not ask these again or silently replace the requested acquisition with existing holdings. “Use my existing 2 QQQB for the initial purchase” uses exactly 2 QQQB without swapping. For “Use existing QQQB equivalent to 0.5 BNB for the initial purchase”, use a fresh wallet quote as the conversion reference and show the exact QQQB amount in the creation confirmation; do not spend BNB. A bare BNB-equivalent budget without an acquisition/existing-holdings instruction needs that funding-source question, combined with other missing decisions.
 
 For an explicit BNB-funded acquisition:
 
@@ -285,15 +285,15 @@ Submit `Idempotency-Key` on launch/prepare if you may retry. Same key + same req
 
 ### Mandatory graduation reminders and one-sentence claims
 
-While following a user's launch, trade, receipt or pool query, **on observing a verified migration (phase=2 with the factory's actual Flap-token mapping), proactively check the current holder's claim eligibility**. Do not wait until a sell fails. Use `GET /api/agent/resolve/{ca}?from={holder}`. `position.requiresClaim:true` requires a reminder with the full pool address, actual Flap CA, verifiable outstanding entitlement, BNB Gas requirement, and “发送「领取代币 {完整CA}」即可开始领取；也可说「领取代币 {完整CA} 到 {收款钱包}」。” Graduation alone does not deliver the tokens. Deduplicate by chain/pool/holder/claim status, and continue an already requested claim instead of requiring that phrase again. Report zero/already-claimed positions correctly. Installing a skill does not create background monitoring; do not promise unattended notifications without a real monitoring task.
+While following a user's launch, trade, receipt or pool query, **on observing a verified migration (phase=2 with the factory's actual Flap-token mapping), proactively check the current holder's claim eligibility**. Do not wait until a sell fails. Use `GET /api/agent/resolve/{ca}?from={holder}`. `position.requiresClaim:true` requires a reminder with the full pool address, actual Flap CA, verifiable outstanding entitlement, BNB Gas requirement, and “Say “Claim tokens {full CA}” or “Claim tokens {full CA} to {destination wallet}” to start.” Graduation alone does not deliver the tokens. Deduplicate by chain/pool/holder/claim status, and continue an already requested claim instead of requiring that phrase again. Report zero/already-claimed positions correctly. Installing a skill does not create background monitoring; do not promise unattended notifications without a real monitoring task.
 
-“领取代币 {CA}” is an explicit claim intent, before buy/sell routing. Accept either the verified pool or actual Flap CA, resolve to `pool`, `tokenAddress` and the holder's `position`, and claim the entire outstanding entitlement. Do not ask for trade direction or amount. Default holder to the connected signing wallet and destination to holder; ask together only for genuinely missing/ambiguous CA, wallet access or destination. Recover stored orders/hashes first, and check `position.requiresClaim`. Claiming needs BNB Gas and wallet preview, but no Agent ID, purchase or ERC20 approval.
+“Claim tokens {CA}” is an explicit claim intent, before buy/sell routing. Accept either the verified pool or actual Flap CA, resolve to `pool`, `tokenAddress` and the holder's `position`, and claim the entire outstanding entitlement. Do not ask for trade direction or amount. Default holder to the connected signing wallet and destination to holder; ask together only for genuinely missing/ambiguous CA, wallet access or destination. Recover stored orders/hashes first, and check `position.requiresClaim`. Claiming needs BNB Gas and wallet preview, but no Agent ID, purchase or ERC20 approval.
 
 Use `POST /api/transactions/prepare` with `{from:holder, action:"claim", pool:resolvedPool}`. It encodes `claimFor(from)`, value=0. Resolve exposes `position.sharesWei`, `claimed`, `requiresClaim` and `tokenBalanceWei`; shares are not wallet tokens. Verify claimable units as integer `distributableTokens * sharesWei / finalShares`, rounded down, and calculate any refund analogously from chain getters; do not invent API fields. After preview, merge the full pool/token addresses, verifiable entitlement/refund, recipient, Gas and wallet risks into one confirmation for that transaction. Execute once and follow its stored order/hash. Report received tokens only after a successful receipt and reconciliation of `claimed` and the **actual net receipt**. BNB-pool leftovers credited to pending require a separate withdrawal.
 
 ### A specified receiving wallet
 
-Support “领取代币 {CA} 到 {destination}” as one user intent. Existing `claimFor(holder)` pays only the share holder; replacing its argument with destination claims destination's own entitlement, not the user's tokens. The API has no `recipient` or `claimTo`. If destination equals holder, use a normal claim. Otherwise explain before preview that it requires **claim to holder, then transfer the claimed tokens**. Each dependent transaction needs its own available preview/details and one confirmation; do not ask the user to repeat the intent or imply one direct on-chain claim to another address.
+Support “Claim tokens {CA} to {destination}” as one user intent. Existing `claimFor(holder)` pays only the share holder; replacing its argument with destination claims destination's own entitlement, not the user's tokens. The API has no `recipient` or `claimTo`. If destination equals holder, use a normal claim. Otherwise explain before preview that it requires **claim to holder, then transfer the claimed tokens**. Each dependent transaction needs its own available preview/details and one confirmation; do not ask the user to repeat the intent or imply one direct on-chain claim to another address.
 
 After claiming succeeds, read the official wallet skill's send reference and transfer only this claim's verifiable net receipt. Use the actual Flap token CA, chain 56, the exact specified recipient and a precise decimal amount. Never use `--max`, include existing holdings, pass the pool as `tokenAddress`, or change the destination. Respect address-book requirements; if blocked, guide the user to add the recipient in Binance App and resume without bypassing the restriction. Confirm full CA, exact amount, recipient, known transfer taxes and Gas. A transfer hash is submission; follow the transfer history/receipt and report verified net arrival without assuming tax-free transfers.
 
