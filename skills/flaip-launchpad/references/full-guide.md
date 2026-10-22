@@ -17,9 +17,9 @@ All endpoints below are relative to this origin.
 
 ### One-sentence fast path (preferred)
 
-First collect the required decisions in section 3, asking only for missing answers together. Then call `POST /api/agent/quick-launch` once: it checks Agent ID, derives a missing symbol, applies the explicitly selected avatar/quote asset/tax use/initial amount, pins metadata and returns the transaction plus wallet preview. Do not auto-pick these decisions. No separate preflight is needed unless diagnosing a balance or eligibility blocker.
+First collect the required decisions in section 3, asking only for missing answers together. If the user funds an ERC20 initial buy with BNB, complete the wallet conversion in section 3.1 first. Then call `POST /api/agent/quick-launch` once with the actual quote-token amount: it checks Agent ID, derives a missing symbol, applies the explicitly selected avatar/quote asset/tax use/initial amount, pins metadata and returns the transaction plus wallet preview. Do not auto-pick these decisions. No separate preflight is needed for direct launches unless diagnosing a balance or eligibility blocker; check launch eligibility before spending BNB on a funding swap.
 
-Before signing, check `transaction.chainId=56`, `transaction.from` is your wallet, `transaction.to` is the current factory, `transaction.valueWei` is the amount the user authorized (0 only when the user explicitly declined an initial purchase), and `metadata` matches the intent and assumptions. Use the final API calldata directly; ordinary launches do not require reverse-engineering an ABI. Keep the official wallet's parsed transaction and security checks. If a verified ABI is available, decoding is optional; unexplained conflicts between calldata, wallet preview and the summary must stop signing.
+If `approvalRequired:true`, handle the approval under section 8 first; its `to` is the quote-token contract. Before signing the subsequent creation, check `transaction.chainId=56`, `transaction.from` is your wallet, `transaction.to` is the current factory, and `metadata` matches the intent and assumptions. For a BNB pool, `transaction.valueWei` is the authorized initial BNB amount (0 when declined). For a QQQB/BNCB pool it is 0 even for a positive initial buy; verify `initialBuy.asset/amountWei` against the authorized quote-token amount separately. Use the final API calldata directly; ordinary launches do not require reverse-engineering an ABI. Keep the official wallet's parsed transaction and security checks. If a verified ABI is available, decoding is optional; unexplained conflicts between calldata, wallet preview and the summary must stop signing.
 
 The response lists `quick.assumptions`; include every assumption in the single confirmation (group empty description/social fields together). If the user wanted a different symbol, avatar or buy amount, pass it in the same call before signing.
 
@@ -38,7 +38,7 @@ The official website follows `factoryPolicy=latest-verified`. Its server detects
 ### Default experience — do not turn settings into a questionnaire
 
 1. Collect only missing required information in **one** message. Use information already supplied.
-2. Prepare and run the wallet preview, then merge the API `confirmation` summary with `parsedTx`, `risks` and `authorityChanges` into **one final confirmation**. Do not first ask to approve parameters and then ask the same thing again after preview.
+2. Prepare and run the wallet preview, then merge the API `confirmation` summary with `parsedTx`, `risks` and `authorityChanges` into **one final confirmation for that transaction**. Do not first ask to approve parameters and then ask the same thing again after preview. Funding swaps, required approvals and creation have separate dependent transactions; confirm each after its quote/preview is available.
 3. After confirmation, execute once and follow the hash to a terminal result. Report submitted/mined/confirmed/indexing accurately; do not make the user request status repeatedly.
 
 | Setting | Default | When to ask/change |
@@ -47,7 +47,7 @@ The official website follows `factoryPolicy=latest-verified`. Its server detects
 | MEV preference | Protection preferred, but **current Binance `contract-call` does not expose a protection switch or verifiable protected route** | Say “当前内盘无法保证防夹，将普通提交” in the final confirmation and continue only after that confirmation. Do not show “MEV enabled”, invent a CLI flag or silently substitute a different route |
 | Network fee | Let the wallet preview estimate automatically; omit Gas flags | No automatic speed-up or high-fee retry. A specific `gasLimit` is advanced and only sent when explicitly requested |
 | Inner platform fee | **0.2%** of executed buy and sell volume, in the pool's quote asset; unused payment is not charged | Contract-fixed, cannot be changed by a preference |
-| Buy amount / initial buy | Exact amount the user requested | Never invent an amount or spend the wallet's entire balance |
+| Buy amount / initial buy | Exact amount requested, or the actual quote tokens obtained with the user's BNB funding budget | Guide ERC20 initial buys in BNB-equivalent terms; resolve to quote-token units under section 3.1. Never invent an amount or spend unrelated holdings |
 | Required launch decisions | Avatar, Flap quote asset, tax use, whether/how much to buy initially | Ask missing decisions together; never auto-select them |
 | Ordinary launch defaults | Buy/sell tax 1% each, beneficiary = creator; empty description/social links | Use defaults and show them in the final confirmation; only customize when requested |
 
@@ -65,11 +65,11 @@ Ask only for missing information, together:
 - **avatar**: user-supplied image, a chosen built-in art name, or explicit acceptance of a recommendation (art=auto);
 - **Quote asset / 底池**: BNB, QQQB or BNCB; the inner market and the graduated Flap pair both use it;
 - **tax use**: marketing (金库收益), burn (自动销毁), dividend (持币分红) or liquidity (自动加池);
-- **initial purchase**: ask whether to buy at creation and how much of the selected quote asset; require the exact amount, or explicit 0 for no purchase.
+- **initial purchase**: for BNB pools ask how much BNB; for QQQB/BNCB pools first offer a BNB-equivalent funding budget, e.g. “购买 0.5 BNB 的 QQQB 作为首购”. Also accept an exact amount from existing quote-token holdings, or explicit 0 for no purchase. Mention only the selected quote asset when it is already known.
 
 These decisions are required in both quick and exact modes. A name alone is not sufficient. Do not ask again when the user already supplied an answer, but never silently substitute a random avatar, BNB, marketing, or zero buy. Missing choices return LAUNCH_CHOICES_REQUIRED with missing/questions before uploads or transaction construction.
 
-A positive initial purchase amount already answers whether to buy; do not ask that question again. The amount must be in the selected quote asset. Ask only if its amount or unit is still unclear.
+A positive initial purchase amount or BNB-equivalent budget already answers whether to buy; do not ask that question again or require the user to calculate quote-token quantities. Resolve the funding intent under section 3.1, then send quote-token units to the API. Ask only for a missing amount, unit or funding source.
 
 Descriptions, social links, tax rates, beneficiary and minimum dividend balance may use ordinary defaults. Default trading slippage, fees and gas remain unchanged. Present the selected creation configuration and wallet risks in one final confirmation. A zero initial buy costs only gas; only use zero when explicitly declined.
 
@@ -78,6 +78,20 @@ Never invent token content. The name, symbol, image, description, links and tax 
 On contract version 0.7, creation and the developer's initial purchase execute atomically. Only that purchase is exempt from the 2% limit. The developer is the actual `from`/pool creator, not the tax beneficiary or factory deployer. Subsequent buys by every wallet, including the creator, are limited to a net holding of 20,000,000 shares (2% of 1B). Selling restores capacity. A creator already above 20M cannot buy again until below the limit. The initial purchase still pays the normal 0.2% fee on the executed amount; unused funds are returned in the same transaction. Refund rejection reverts the entire transaction. For QQQB/BNCB the factory pulls the initial amount from the creator, which needs an exact ERC20 approval first (see §8 approvals).
 
 Read `economics` from `/api/agent` or `/api/preflight`. Earlier factories (0.5/0.6) stay readable on the site but new launches and trades return `CONTRACT_UPGRADE_REQUIRED` until the 0.7 factory is deployed. Never simulate the exemption by sending a separate ordinary buy.
+
+### 3.1 BNB-equivalent initial purchase budgets
+
+Use the selected quote asset in the question: “你想购买多少 BNB 等值的 QQQB 用于首购？例如：购买 0.5 BNB 的 QQQB 作为首购；也可指定使用已有 QQQB 的数量，或不首购。” Substitute BNCB when selected. For BNB pools, a 0.5 BNB initial buy maps directly to `initialBuyAmount:"0.5"` without a funding swap.
+
+“购买 0.5 BNB 的 QQQB 作为首购” means spend 0.5 BNB to acquire QQQB, then use the actual net QQQB received as the initial purchase budget. It already specifies a positive initial purchase, source asset, budget and destination asset. Do not ask these again or silently replace the requested acquisition with existing holdings. “用已有 2 QQQB 首购” uses exactly 2 QQQB without swapping. For “用已有 QQQB 按 0.5 BNB 等值首购”, use a fresh wallet quote as the conversion reference and show the exact QQQB amount in the creation confirmation; do not spend BNB. A bare BNB-equivalent budget without an acquisition/existing-holdings instruction needs that funding-source question, combined with other missing decisions.
+
+For an explicit BNB-funded acquisition:
+
+1. Collect the remaining creation choices and check launch eligibility and available BNB before buying the funding token. Read the target token address from the live `/api/agent` `quoteAssets` entry on chain 56, and use the native BNB identifier from the installed official wallet skill. Read its market-order and security references; never identify tokens by symbol alone or invent a route.
+2. Run the wallet's security pre-check and a live `market-order quote` with `fromTokenQty` equal to the exact BNB budget and `toToken` equal to the selected quote asset. Use `defaults.externalSwap`; quote supports the slippage argument, while MEV/Gas options belong to swap. Present the BNB input, full target CA, expected and minimum quote-token receipt, swap fees and BNB Gas before confirming the funding swap. Reserve enough BNB for the swap, any approval and creation. A stated total spending cap includes fees; do not silently exceed it or shrink the requested input.
+3. After confirmation, execute the funding swap once and preserve its orderId/hash. Poll `market-order list --orderId` to FINISHED/FAILED; an orderId or PENDING is not success. Use the successful execution's **actual net received quantity**, from the fill/receipt or a reconciled balance change. Keep decimal/integer precision and separate these acquired tokens from pre-existing holdings. Never substitute an indicative quote, spot price, wallet total balance or historical conversion rate for the fill.
+4. Only then build the launch using that amount as `initialBuyAmount` or `initialBuyWei`, in QQQB/BNCB units. This is the inner purchase's total quote-token budget, including its 0.2% platform fee; do not top it up from unrelated holdings. For an ERC20 pool never send `initialBuyBnb`, put the BNB-budget number directly into `initialBuyAmount`, or send BNB as the creation value. “0.5 BNB” is the funding input; the actual post-fee output need not remain worth precisely 0.5 BNB.
+5. Continue through any exact ERC20 approval and then the creation wallet preview. Each dependent transaction gets one merged confirmation after its quote/preview; never promise one signature or approve an unseen future wallet preview. If funding succeeds but approval/creation fails, report the stages separately and resume from the stored received-token amount; do not buy the funding token again. If the swap fails, has no route or has an unverified receipt amount, stop before creation. Leave acquired tokens in the wallet instead of automatically selling them back.
 
 ## 4. Create the token in one call
 
@@ -108,7 +122,7 @@ Both modes require the user decisions above. Quick mode may derive symbol and re
 | Field | Required | Rules | Default |
 | --- | --- | --- | --- |
 | `from` | yes | Signing wallet, `0x` + 40 hex, must hold `.ai` Agent ID | — |
-| `initialBuyAmount` | one amount required in both modes | Nonnegative decimal string in the selected quote asset, max 18 decimals; 0 only for explicit no-buy. `initialBuyWei` is the integer alternative; `initialBuyBnb` is accepted only for BNB pools | — |
+| `initialBuyAmount` | one amount required in both modes | Nonnegative decimal string in the selected quote asset, max 18 decimals; BNB funding budgets must first be resolved under section 3.1. 0 only for explicit no-buy. `initialBuyWei` is the integer alternative; `initialBuyBnb` is accepted only for BNB pools | — |
 | `initialBuyWei` | alternative | Nonnegative wei integer string; if both amounts provided they must agree | — |
 | `name` | yes | 1–64 characters | — |
 | `symbol` | exact: yes; quick: optional | 1–16 characters, `A-Z a-z 0-9 _`; quick derives it from `name` | derived |
@@ -187,12 +201,12 @@ curl -X POST "https://flaip.xyz/api/agent/launch" \
 
 ## 5. Check the transaction before asking the user to sign
 
-Verify every item:
+For an approval response (`approvalRequired:true`), follow section 8 before checking the later creation transaction. For the creation, verify every item:
 
 - `transaction.chainId` = `56`;
 - `transaction.from` = your wallet, case-insensitive;
 - `transaction.to` = `factory` from `/api/runtime`;
-- `transaction.valueWei` equals the exact initial buy authorized by the developer (0 when declined);
+- `transaction.valueWei` equals the authorized initial BNB amount for a BNB pool; it is 0 for a QQQB/BNCB pool. Check the latter's `initialBuy.asset/amountWei` against the user's quote-token budget or the funding swap's actual net receipt instead;
 - `transaction.data` is the API-built calldata. Compare the summary and wallet preview with the user's intent and `quick.assumptions`. Decoding with a verified ABI is optional; do not make routine creation depend on reconstructing an ABI. Stop on any conflict;
 - `metadata` matches what the user approved, including the image CID;
 - `metadataHash` and `launchConfigHash` are the values the factory will verify.
@@ -215,7 +229,7 @@ For quick launch, go straight from the API response to this preview; do not inse
 - `binanceChainId`: `56`
 - `from`: the wallet address
 - `to`: the factory
-- `value`: the exact `transaction.valueWei` returned by the API, converted to the wallet tool's required units; never hardcode zero for a nonzero initial buy
+- `value`: the exact `transaction.valueWei` returned by the API, in wei; a QQQB/BNCB creation has value 0 even for a positive initial buy, while a BNB creation carries the authorized initial BNB amount
 - `inputData`: `transaction.data`
 
 Show `parsedTx`, `risks` and `authorityChanges`. Execute only after a successful preview, with the same `requestId`, and only if the transaction has not expired. Never execute after a failed preview.
@@ -319,7 +333,7 @@ Buy/sell transactions carry a 10-minute deadline. If the user takes too long, pr
 
 The inner pool API is not an external DEX router. For a graduated token, resolve the **actual on-chain `flapToken`** from the verified pool; never pass the pool share address to a DEX or invent an address from its symbol. Use the official wallet skill's supported market-order route and its security pre-check. If no supported route exists, report it without replacing the user's venue or changing the trade.
 
-For supported external swaps, `defaults.externalSwap` means `--slippage 1`, `--mev true`, `--gasLevel MEDIUM` (quote accepts only `--slippage 1`, not the other flags). These are swap parameters, **never contract-call flags**. Default to these values without asking; only override when explicitly requested. Show any token taxes, DEX/wallet fees and the quote's minimum receipt before the single confirmation; the inner pool's 0.1% fee does not describe external swap fees. If a taxed token cannot trade at 1%, explain the failure; do not auto-raise slippage or disable MEV protection. Follow `market-order list` by the returned order ID until `FINISHED` or `FAILED`; an order ID is not evidence of a successful trade.
+For supported external swaps, `defaults.externalSwap` means `--slippage 1`, `--mev true`, `--gasLevel MEDIUM` (quote accepts only `--slippage 1`, not the other flags). These are swap parameters, **never contract-call flags**. Default to these values without asking; only override when explicitly requested. Show any token taxes, DEX/wallet fees and the quote's minimum receipt before the single confirmation; the inner pool's 0.2% fee does not describe external swap fees. If a taxed token cannot trade at 1%, explain the failure; do not auto-raise slippage or disable MEV protection. Follow `market-order list` by the returned order ID until `FINISHED` or `FAILED`; an order ID is not evidence of a successful trade.
 
 ### Quote assets and graduation
 

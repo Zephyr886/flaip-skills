@@ -1,6 +1,6 @@
 ---
 name: flaip-launchpad
-description: Launch and trade Agent-ID-gated tokens on FLAIP (https://flaip.xyz, BNB Chain). Use when the user wants to create or launch a token on FLAIP / AGENT//PAD, buy or sell a FLAIP token by contract address (CA) or pool, claim graduated tokens, withdraw or refund, or check a FLAIP transaction. Builds unsigned transactions through the FLAIP API and signs them with the Binance Agentic Wallet contract-call after one user confirmation.
+description: Launch and trade Agent-ID-gated tokens on FLAIP (https://flaip.xyz, BNB Chain). Use when the user wants to create or launch a token on FLAIP / AGENT//PAD, fund an initial purchase with a BNB-equivalent quote-token budget, buy or sell a FLAIP token by contract address (CA) or pool, claim graduated tokens, withdraw or refund, or check a FLAIP transaction. Builds unsigned transactions through the FLAIP API and signs them with the Binance Agentic Wallet after preview and user confirmation.
 ---
 
 # FLAIP Launchpad · 0.7.0
@@ -36,13 +36,29 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 1. **代币头像**：上传哪张图片、选择哪个内置头像，或明确同意系统推荐？
 2. **底池报价币**：BNB / QQQB / BNCB？内盘买卖和毕业后的 Flap 底池都使用它。
 3. **税收使用方式**：金库收益 marketing / 自动销毁 burn / 持币分红 dividend / 自动加池 liquidity？
-4. **是否首购、购买多少**：创建时是否购买？若买，按所选报价币买多少（BNB/QQQB/BNCB）？不买明确记为 0；仅创建首购不限购。
+4. **是否首购、首购预算**：按已选底池引导。BNB 底池问“首购多少 BNB？”；QQQB/BNCB 底池优先问“你想购买多少 BNB 等值的 QQQB/BNCB 用于首购？例如：购买 0.5 BNB 的 QQQB 作为首购。”也接受用户直接指定已有报价币数量；不买明确记为 0。底池已选时只提该报价币；仅创建首购不限购。
 
 名称未给也一并补问。名称已给时可派生符号；描述、社交、税率、Gas 与滑点等普通设置沿用默认，不逐项问。
-用户已给出正数首购金额，就已明确同意首购，不再询问是否购买；金额单位必须与所选底池报价币一致，单位或金额尚未明确时一并补问。
+用户已给出正数首购金额或 BNB 等值预算，就已明确同意首购，不再询问是否购买，也不要求用户自行换算报价币数量。仅金额、单位或资金来源尚未明确时一并补问，按下节换算后再调用创建接口。
 不得用随机头像、BNB 底池、marketing 或 0 首购静默代替这些答案。缺失时接口返回 LAUNCH_CHOICES_REQUIRED 与 missing/questions，先补齐再构建；不上传元数据、不创建草稿。
 
-答案齐全后一次调用 POST /api/agent/quick-launch。以下仅示意用户已选的答案，不是默认：
+### 用 BNB 等值预算首购
+
+- **BNB 底池**：“首购 0.5 BNB”直接对应 `initialBuyAmount:"0.5"`，无需兑换。
+- **购买报价币再首购**：“购买 0.5 BNB 的 QQQB 作为首购”（“0.5 BNB 等值的 QQQB”也可）表示先用 0.5 BNB 兑换 QQQB，再把**本次实际净到账的 QQQB**用作首购。BNCB 同理。记住预算、目标报价币与该意图；不要再问买不买、买多少，也不要因为钱包已有报价币而擅自跳过这笔明确要求的兑换。
+- **使用已有报价币**：“用已有的 2 QQQB 首购”直接用 2 QQQB，不兑换；“用已有的 QQQB 按 0.5 BNB 等值首购”用钱包实时报价换算并在创建确认中展示确切 QQQB 数量，不花 BNB 去购买。只说“0.5 BNB 等值”而未说明兑换还是用已有持币时，连同其他缺失项一次补问资金来源；仅有数字无单位也要补问。
+
+需要兑换时，先集齐其余创建选择并检查钱包资格及预算，再用官方钱包技能做安全检查与 BNB→所选报价币的实时 `market-order quote`；chainId=56，目标地址取 `GET /api/agent` 的 `quoteAssets`，不要按币名猜 CA。沿用 `defaults.externalSwap`（当前滑点 1%、MEV true、Gas MEDIUM）；quote 只传支持的滑点参数。展示完整代币地址、0.5 BNB 输入、预计/最低到账报价币、兑换费用与 Gas 后确认兑换。该预算用于兑换输入，须另外留足兑换、授权和创建所需 BNB Gas；用户若指定总支出上限，必须把费用计入上限，不能加花。
+
+用户确认后提交一次，保存 orderId/hash，自动查询 `market-order list --orderId` 到 FINISHED/FAILED；PENDING 继续跟进，不再发起第二笔兑换。只有成功后才从订单成交记录、回执或核对过的余额变化取得本次**净到账数量**，保留最小单位精度；不得用预估到账、钱包总余额或历史汇率代替。兑换成功不代表已经创建；兑换失败、无路由或数量无法确认时停止创建并如实报告，已兑换的报价币留在钱包，不自动卖回。
+
+把本次净到账数量作为 `initialBuyAmount` / `initialBuyWei` 的首购预算（含内盘 0.2% 平台费，无需额外加报价币），再调用创建接口；已有报价币路径则使用用户指定或实时折算并确认的数量。`initialBuyAmount` 始终是**报价币数量**，例如 0.5 BNB 换得 Q 个 QQQB 就填 Q，绝不能在 QQQB/BNCB 底池填 `initialBuyBnb:"0.5"` 或把 0.5 直接当报价币数量。BNB 估值只作预算说明，不保证扣费或价格变动后仍精确等值。
+
+兑换、必要的 ERC20 授权、创建是有先后依赖的独立交易：每笔在报价/钱包预览后合并摘要确认，不对同一笔反复确认；后续授权或创建失败时保存已成交的兑换结果并从后续步骤恢复，不再花一次 BNB 兑换。不得用一次确认绕过尚未生成的后续钱包预览。
+
+### 生成创建交易
+
+选择和实际首购数量齐全后一次调用 POST /api/agent/quick-launch。以下仅示意用户已选的答案，不是默认：
 
 ```json
 {"from":"0xYourWallet","name":"Moon Cat","art":"neko","quoteAsset":"QQQB","model":"dividend","initialBuyAmount":"0"}
