@@ -1,11 +1,11 @@
 ---
 name: flaip-launchpad
-description: Launch and trade Agent-ID-gated tokens on FLAIP (https://flaip.xyz, BNB Chain). Use when the user wants to create or launch a token on FLAIP / AGENT//PAD, fund an initial purchase with a BNB-equivalent quote-token budget, buy or sell a FLAIP token by contract address (CA) or pool, claim graduated tokens, withdraw or refund, or check a FLAIP transaction. Builds unsigned transactions through the FLAIP API and signs them with the Binance Agentic Wallet after preview and user confirmation.
+description: Launch and trade Agent-ID-gated tokens on Flaip (https://flaip.xyz, BNB Chain). Use when the user wants to create a token, fund an initial purchase with a BNB-equivalent budget, buy or sell by CA or pool, claim graduated tokens with a CA or to a specified wallet, withdraw or refund, or check a Flaip transaction. Proactively remind holders to claim after a verified migration. Uses the Flaip API and Binance Agentic Wallet with preview and confirmation; other-wallet claims use claim then transfer.
 ---
 
-# FLAIP Launchpad · 0.7.0
+# Flaip Launchpad · 0.7.0
 
-用户一句话即可让你在 FLAIP 创建代币或买卖：本技能负责调用 FLAIP 接口构建未签名交易，签名由币安 Agentic Wallet 完成。
+用户一句话即可让你在 Flaip 创建、买卖或领取代币：本技能负责调用 Flaip 接口构建未签名交易，签名由币安 Agentic Wallet 完成。观察到迁移后必须主动检查并提醒领取；“领取代币 + CA”直接进入领取，指定其他收款钱包时按先领取、再转出完成。
 
 ## 开始前（每个会话只检查一次）
 
@@ -21,7 +21,7 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 
 ## 首次使用
 
-尚未安装 FLAIP 技能时运行 `npx skills add Zephyr886/flaip-skills`；已安装可跳过。无法运行 npx 时直接读取本指南（`https://flaip.xyz/agent-quickstart.md`），按下述相同规则完成创建或交易。
+尚未安装 Flaip 技能时运行 `npx skills add Zephyr886/flaip-skills`；已安装可跳过。无法运行 npx 时直接读取本指南（`https://flaip.xyz/agent-quickstart.md`），按下述相同规则完成创建或交易。
 
 使用官方 binance-agentic-wallet 技能确认钱包已连接，取得自己能签名的地址。
 自定义合约调用要求币安 App 中的 Developer Mode 已开启；读取 wallet settings 检查，不替用户修改设置。
@@ -73,6 +73,30 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 
 **ERC20 授权**：QQQB/BNCB 首购或买入时若授权不足，接口返回 `approvalRequired:true`，其中 `transaction` 是对工厂（首购）或该内盘池（买入）的精确金额 `approve`，不是买入或创建。预览确认授权并上链后，按 `followUp` 重新请求（首购：`POST /api/transactions/prepare` `{"from","action":"create","draftId"}`；买入：原买入请求），再预览确认一次。不得把授权成功说成已创建或已成交。
 
+## 迁移后必须主动提醒领取
+
+跟进创建、买卖、回执或查询相关池状态时，**一旦核验池已迁移（phase=2、工厂映射对应真实 Flap CA），必须主动检查当前持有钱包是否可领取**，不得等到卖出报错才检查。用 `GET /api/agent/resolve/{ca}?from={holder}` 查询；`position.requiresClaim:true` 时主动告知“该代币已迁移至 Flap，你有待领取代币。发送「领取代币 {完整CA}」即可开始领取；也可说「领取代币 {完整CA} 到 {收款钱包}」。”同时给出真实池地址、Flap CA 和 BNB Gas 要求；内盘份额尚未领取时不能说正式代币已到账。
+
+同一池、持有人和领取状态只提醒一次；用户已请求领取则直接续办，不要求重发口令。无份额或已领取须明确状态。只对实际观察到的迁移提醒；安装 skill 本身不会创建后台监控，不能承诺离线持续监控。
+
+### “领取代币 + CA”直接领取
+
+识别“领取代币 0x…”、“领取 0x… 到 0x收款钱包”等明确意图，**不再问买卖方向或领取数量**，默认领取该持有钱包全部未领取份额对应的代币。CA 接受已核验的内盘池或正式 Flap CA，先 resolve 得到 `pool`、`tokenAddress` 和 `position`。持有钱包默认当前能签名的钱包；只将确实缺失/含糊的 CA、钱包连接或收款地址一次补问。
+
+1. 先恢复本次领取/转出的已有订单和哈希；有 hash 只跟进。核对链 56、工厂映射及 `position.requiresClaim`；未迁移就告知尚不能领取，无份额或已领取不重复构建。领取无需 Agent ID、买入或 ERC20 approve。
+2. 默认领取到持有钱包。调用 `POST /api/transactions/prepare`，传 `{"from":"持有钱包","action":"claim","pool":"resolve得到的池地址"}`；接口编码 `claimFor(from)`，value=0。完成钱包预览，将真实池/Flap CA、可核验的领取金额与余款、收款地址和 Gas 合并确认一次，再执行并保存 orderId/hash，自动跟进结果。
+3. 成功回执后用 resolve/真实代币余额核验 `claimed` 和**本次净到账**，再报告已领取。广播中只说已提交；迁移成功不能当作领取成功。BNB 底池待提余款另行说明 withdraw。
+
+### 指定另一收款钱包
+
+用户可一次说“领取代币 {CA} 到 {收款钱包}”，Agent 记住目标并续办。**现有 `claimFor(holder)` 固定发给原份额持有人；将参数替换成另一地址，只会领取该地址自己的份额，不能改用户的收款人。** API 没有 `recipient`/`claimTo` 字段，不得伪造。
+
+地址与持有钱包相同则正常领取；不同则在预览前明确说明“领取到持有钱包 → 转给指定钱包”需要两笔交易，各在可执行时预览/核对并确认一次，不要求用户重说领取或转出意图。保留足够 BNB Gas，校验 BSC 地址和完整收款地址，不自行替换。
+
+领取成功、核实本次净到账后，读取官方钱包技能的 send 说明，使用真实 Flap CA、chainId=56、指定 recipient 和本次净到账的精确十进制数量执行 `wallet send`。**不使用 --max、不转走原有余额、不把池地址作为 tokenAddress。** 钱包要求收款人在地址簿时，提示在 Binance App 添加后续办，不绕过限制。转出前展示完整 CA、确切数量、收款地址、已知转账税和 Gas，确认后只提交一次；以真实转账回执及收款净额报告到账，不保证转账免税或固定净额。
+
+领取、转出分别记录订单/hash。领取成功但转出失败要报告“已领取到持有钱包，转出未完成”，只恢复转出，不再次领取；处理中只查原订单。早已领取且没有本次净到账记录时，不能擅自转出钱包总余额。指定收款的领取流程不自动卖出；主动提醒不构成签名、转账或批量代发授权。
+
 ## CA 快速买卖
 
 有完整 CA、方向和金额，直接 `POST /api/agent/trade`：
@@ -87,7 +111,7 @@ CA 可为当前工厂的内盘池或真实毕业代币。服务实时核验工�
 
 - `route:internal`：交易、钱包预览与确认摘要已齐，按下节执行。
 - `route:external`：返回的是 `walletQuote`/`walletSwap` 参数，尚未报价或构建交易。用官方钱包做安全检查和实时报价，展示最低到账、税费及风险后确认执行；跟进 orderId 到 FINISHED/FAILED。无路由就停止。
-- `CLAIM_REQUIRED`：先向用户说明并预览确认领取，再重新报价卖出。
+- `CLAIM_REQUIRED`：按上节领取流程说明并预览确认领取，成功后仅按原卖出意图重新报价；明确的“领取代币 + CA”不进入买卖补问。
 
 内盘卖出所得在同一交易直接到账（`confirmation.settlement:direct`），无需另行提取。只有 BNB 底池毕业后的剩余退款会记入待提取余额，需 `withdraw`。
 用户有价格条件时是触发订单，不得改成立即买卖。
@@ -99,6 +123,7 @@ CA 可为当前工厂的内盘池或真实毕业代币。服务实时核验工�
 3. 用户明确确认后，用成功预览的同一 requestId 执行一次。执行前通过 `/api/runtime` 核对工厂未变；报价超出 quoteRefreshAt/交易 expiresAt 时先刷新预览再确认。不要自动放宽滑点、加价或重发。
 4. 钱包返回 orderId/PENDING_CONFIRMATION 时先保存并跟进钱包订单/必要 App 确认；未拿到 hash 时不当成失败重新签名。出现 hash 立即保存并 `POST /api/transactions/receipt`：`{"hash":"0x…","buildId":"…"}`。
 5. 广播仅报告“已提交”；`status:success` 且有成功回执才报告“已创建/成交”，创建回执中的 pool 即内盘地址。继续按 retryAfterMs 查询 `GET /api/transactions/{hash}`，直到确认/失败；indexed=false 仅表示网站尚未展示。回执不等待索引。
+6. 交易或查询显示池已迁移时，立即执行上文领取检查与主动提醒；指定收款流程分别核实领取和转出的回执，不把前一步成功当作全部完成。
 
 恢复：`GET /api/builds/{id}`；next.step=poll 则只查 hash，rebuild 则按原意图用新键重新构建并预览确认，preview 则先预览。
 RPC 超时后有 hash 就查询，绝不重复签名。BUILD_HASH_CONFLICT 不可覆盖原 hash。失败或重组如实报告。

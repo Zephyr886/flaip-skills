@@ -1,4 +1,4 @@
-# AGENT//PAD Agent guide
+# Flaip Agent guide
 
 API origin: `https://flaip.xyz`. BSC chain ID: **56**.
 
@@ -283,6 +283,22 @@ Submit `Idempotency-Key` on launch/prepare if you may retry. Same key + same req
 
 ## 8. Trading, claims, withdrawals and refunds
 
+### Mandatory graduation reminders and one-sentence claims
+
+While following a user's launch, trade, receipt or pool query, **on observing a verified migration (phase=2 with the factory's actual Flap-token mapping), proactively check the current holder's claim eligibility**. Do not wait until a sell fails. Use `GET /api/agent/resolve/{ca}?from={holder}`. `position.requiresClaim:true` requires a reminder with the full pool address, actual Flap CA, verifiable outstanding entitlement, BNB Gas requirement, and “发送「领取代币 {完整CA}」即可开始领取；也可说「领取代币 {完整CA} 到 {收款钱包}」。” Graduation alone does not deliver the tokens. Deduplicate by chain/pool/holder/claim status, and continue an already requested claim instead of requiring that phrase again. Report zero/already-claimed positions correctly. Installing a skill does not create background monitoring; do not promise unattended notifications without a real monitoring task.
+
+“领取代币 {CA}” is an explicit claim intent, before buy/sell routing. Accept either the verified pool or actual Flap CA, resolve to `pool`, `tokenAddress` and the holder's `position`, and claim the entire outstanding entitlement. Do not ask for trade direction or amount. Default holder to the connected signing wallet and destination to holder; ask together only for genuinely missing/ambiguous CA, wallet access or destination. Recover stored orders/hashes first, and check `position.requiresClaim`. Claiming needs BNB Gas and wallet preview, but no Agent ID, purchase or ERC20 approval.
+
+Use `POST /api/transactions/prepare` with `{from:holder, action:"claim", pool:resolvedPool}`. It encodes `claimFor(from)`, value=0. After preview, merge the full pool/token addresses, verifiable entitlement/refund, recipient, Gas and wallet risks into one confirmation for that transaction. Execute once and follow its stored order/hash. Report received tokens only after a successful receipt and reconciliation of `claimed` and the **actual net receipt**. BNB-pool leftovers credited to pending require a separate withdrawal.
+
+### A specified receiving wallet
+
+Support “领取代币 {CA} 到 {destination}” as one user intent. Existing `claimFor(holder)` pays only the share holder; replacing its argument with destination claims destination's own entitlement, not the user's tokens. The API has no `recipient` or `claimTo`. If destination equals holder, use a normal claim. Otherwise explain before preview that it requires **claim to holder, then transfer the claimed tokens**. Each dependent transaction needs its own available preview/details and one confirmation; do not ask the user to repeat the intent or imply one direct on-chain claim to another address.
+
+After claiming succeeds, read the official wallet skill's send reference and transfer only this claim's verifiable net receipt. Use the actual Flap token CA, chain 56, the exact specified recipient and a precise decimal amount. Never use `--max`, include existing holdings, pass the pool as `tokenAddress`, or change the destination. Respect address-book requirements; if blocked, guide the user to add the recipient in Binance App and resume without bypassing the restriction. Confirm full CA, exact amount, recipient, known transfer taxes and Gas. A transfer hash is submission; follow the transfer history/receipt and report verified net arrival without assuming tax-free transfers.
+
+Store claim and transfer state separately. If claiming succeeds but transferring fails, report tokens are in holder's wallet and resume only the transfer. Pending means poll the original order. If already claimed without a record of this intent's net receipt, do not forward the wallet's entire balance. A specified-destination claim does not authorize selling; a reminder does not authorize signing or bulk distribution.
+
 ### CA fast path (preferred for buys/sells)
 
 If the sentence includes a full CA, action and amount, call `POST /api/agent/trade` directly with `from`, `ca`, `action` and the exact quantity. Do not first fetch the full token list, holders, candles, wallet portfolio or separate quote. The server verifies factory membership on chain and returns the actual route.
@@ -309,7 +325,7 @@ Internal sells pay the seller in the same transaction (`confirmation.settlement=
 | --- | --- | --- |
 | `buy` | `{from, action:"buy", pool, amountWei:"500000000000000000"}` | `amountWei` is the pool's quote asset in its smallest unit; for BNB the transaction value equals it, for QQQB/BNCB value is 0 and the pool pulls only cost + fee (approval first); default slippage 1% |
 | `sell` | `{from, action:"sell", pool, sellPercent:50}` | Sell half of the exact current on-chain shares; `sellAll:true` sells all; an exact `amountWei` is also supported |
-| `claim` | `{from, action:"claim", pool}` | Final tokens and quote refund after graduation |
+| `claim` | `{from, action:"claim", pool}` | Tokens and quote refund to the share holder (`claimFor(from)`). Resolve either CA first; another destination requires a subsequent token transfer, not a recipient field |
 | `withdraw` | `{from, action:"withdraw", pool}` | Pending BNB-pool graduation leftovers credited by a claim |
 | `refund` | `{from, action:"refund", pool}` | After expiry and refunds enabled |
 | `enableRefunds` | `{from, action:"enableRefunds", pool}` | Opens pro-rata refunds after the deadline |
