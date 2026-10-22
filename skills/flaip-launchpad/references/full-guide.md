@@ -2,7 +2,7 @@
 
 API origin: `https://flaip.xyz`. BSC chain ID: **56**.
 
-Version: **0.7.0**. For a short first-use flow, read `https://flaip.xyz/agent-quickstart.md`.
+Version: **0.7.0**. For a short first-use flow, read `https://flaip.xyz/agent-quickstart.md`. Install this guide as an agent skill with `npx skills add Zephyr886/flaip-skills`.
 
 All endpoints below are relative to this origin.
 
