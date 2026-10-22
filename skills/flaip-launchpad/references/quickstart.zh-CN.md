@@ -104,8 +104,8 @@ CA 可为当前工厂的内盘池或真实毕业代币。服务实时核验工�
 
 ## 预览、确认、跟进
 
-1. 保存 buildId。核对 chainId=56、from、自身钱包、当前 factory/to、支付 valueWei 与用户意图、metadata/confirmation；使用官方钱包 `contract-call preview`，直接映射 `walletPreview.parameters`（value 是 wei）。服务已编码 calldata，无需为普通流程反推 ABI；钱包解析和风险检查必须保留。
-2. 成功预览后把 API confirmation、quick.assumptions、钱包 parsedTx/risks/authorityChanges 合并确认一次。内盘滑点默认 1%，平台成交费 0.2%（买卖均收，按该池报价币计），Gas 以钱包估费为准；内盘无法保证防夹，将普通提交，必须明确说明。不能绕过钱包拦截或失败预览。
+1. 保存 buildId。核对 chainId=56、from、自身钱包、当前 factory/to、支付 valueWei 与用户意图、metadata/confirmation；使用官方钱包 `contract-call preview`，直接映射 `walletPreview.parameters`（value 是 wei；含 `gasLimit` 时必须原样传入，这是为可能触发毕业的买单预留的迁移 Gas）。服务已编码 calldata，无需为普通流程反推 ABI；钱包解析和风险检查必须保留。
+2. 成功预览后把 API confirmation、quick.assumptions、钱包 parsedTx/risks/authorityChanges 合并确认一次。内盘滑点默认 1%，平台成交费 0.2%（买卖均收，按该池报价币计），Gas 以钱包估费为准；买单的 `confirmation.finalFill.acceptRemainder:true` 表示临近毕业：他人先成交时本笔只买剩余份额并完成毕业，不会因份额减少回滚，均价最多高于报价 `worstPremiumBps`（默认上限 5%，用户明确设置滑点时以该滑点为上限），此时 `minOutWei` 为 1 属正常，须把 `finalFill.notice` 写进确认；服务端给出的 `gasLimit` 要写进同一次确认（例如“为毕业预留 gasLimit 10,000,000，实际只扣用量”），用户确认即为钱包技能要求的明确指定。`resolve` 的 `graduation.fillAmountWei` 是含 0.2% 费、一笔即可毕业的精确金额（单钱包最多 2,000 万份），剩余很少时主动告知一次还差多少，不得自行买入。毕业买单会创建 Flap 代币与 DEX 池：预览被拦截（`AGENT_DEV_MODE_RISK_BLOCKED`）就如实告知原因，不绕过、不改 calldata；执行返回 `PENDING_CONFIRMATION` 时立即提醒用户到 Binance App 确认，之后跟进订单；因池子变化预览报 `351805` 时用新幂等键重建并预览一次，不无限重试；内盘无法保证防夹，将普通提交，必须明确说明。不能绕过钱包拦截或失败预览。
 3. 用户明确确认后，用成功预览的同一 requestId 执行一次。执行前通过 `/api/runtime` 核对工厂未变；报价超出 quoteRefreshAt/交易 expiresAt 时先刷新预览再确认。不要自动放宽滑点、加价或重发。
 4. 钱包返回 orderId/PENDING_CONFIRMATION 时先保存并跟进钱包订单/必要 App 确认；未拿到 hash 时不当成失败重新签名。出现 hash 立即保存并 `POST /api/transactions/receipt`：`{"hash":"0x…","buildId":"…"}`。
 5. 广播仅报告“已提交”；`status:success` 且有成功回执才报告“已创建/成交”，创建回执中的 pool 即内盘地址。继续按 retryAfterMs 查询 `GET /api/transactions/{hash}`，直到确认/失败；indexed=false 仅表示网站尚未展示。回执不等待索引。

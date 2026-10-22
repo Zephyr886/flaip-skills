@@ -45,7 +45,7 @@ The official website follows `factoryPolicy=latest-verified`. Its server detects
 | --- | --- | --- |
 | Slippage | **1%**, `100` bps; enforced by calldata `minOut` | Only when the user explicitly asks; valid override 0–500 bps, never auto-increase |
 | MEV preference | Protection preferred, but **current Binance `contract-call` does not expose a protection switch or verifiable protected route** | Say “MEV protection cannot be guaranteed on the bonding curve; this uses normal submission” in the final confirmation and continue only after that confirmation. Do not show “MEV enabled”, invent a CLI flag or silently substitute a different route |
-| Network fee | Let the wallet preview estimate automatically; omit Gas flags | No automatic speed-up or high-fee retry. A specific `gasLimit` is advanced and only sent when explicitly requested |
+| Network fee | Let the wallet preview estimate automatically; omit Gas flags | No automatic speed-up or high-fee retry. A specific `gasLimit` is advanced and only sent when explicitly requested — except that `walletPreview.parameters.gasLimit`, when the API includes it, must always be forwarded unchanged |
 | Inner platform fee | **0.2%** of executed buy and sell volume, in the pool's quote asset; unused payment is not charged | Contract-fixed, cannot be changed by a preference |
 | Buy amount / initial buy | Exact amount requested, or the actual quote tokens obtained with the user's BNB funding budget | Guide ERC20 initial buys in BNB-equivalent terms; resolve to quote-token units under section 3.1. Never invent an amount or spend unrelated holdings |
 | Required launch decisions | Avatar, Flap quote asset, tax use, whether/how much to buy initially | Ask missing decisions together; never auto-select them |
@@ -142,7 +142,7 @@ Both modes require the user decisions above. Quick mode may derive symbol and re
 | `minimumShareBalance` | no | decimal string; used by `dividend` | `"1000000"` |
 | `slippageBps` | no | integer 0–500; override only if explicitly requested | `100` |
 | `mevProtection` | no | boolean preference; current contract-call cannot guarantee protection, disclose ordinary submission in confirmation | `true` |
-| `gasLimit` | no | integer 21000–15000000; pass only if user specifies it | Wallet estimates |
+| `gasLimit` | no | integer 21000–15000000; pass only if user specifies it. Buys that may graduate get a server-set `walletPreview.parameters.gasLimit` reserving the atomic migration | Wallet estimates |
 
 Multipart values arrive as strings. Send numeric fields as bare integers: `buyTax=100`, not `buyTax=1%`. In JSON send numbers.
 
@@ -234,7 +234,7 @@ For quick launch, go straight from the API response to this preview; do not inse
 
 Show `parsedTx`, `risks` and `authorityChanges`. Execute only after a successful preview, with the same `requestId`, and only if the transaction has not expired. Never execute after a failed preview.
 
-The API provides `walletPreview.parameters` with the exact `from`, `to`, wei `value` and `inputData`. Map these fields to the installed wallet skill, not to a shell command composed from token metadata. Default: **omit all Gas flags**; `contract-call` accepts neither `--mev` nor `--gasLevel` nor gas-price flags. Only forward `gasLimit` if explicitly requested by the user. Show `confirmation.mevNotice` whenever non-null, include fees and all wallet risk findings in the same final confirmation, and wait for approval before execute. A failed or blocked preview is never permission to bypass security.
+The API provides `walletPreview.parameters` with the exact `from`, `to`, wei `value` and `inputData`. Map these fields to the installed wallet skill, not to a shell command composed from token metadata. Default: **omit all Gas flags**; `contract-call` accepts neither `--mev` nor `--gasLevel` nor gas-price flags. Whenever `walletPreview.parameters.gasLimit` is present, forward it unchanged: the API sets it for buys that may complete graduation, whose wallet estimate on the current state would omit the multi-million-gas migration. Otherwise only forward a `gasLimit` the user explicitly requested. Show `confirmation.mevNotice` whenever non-null, include fees and all wallet risk findings in the same final confirmation, and wait for approval before execute. A failed or blocked preview is never permission to bypass security.
 
 ## 7. Confirm on chain, then wait for indexing
 
@@ -336,6 +336,10 @@ Internal sells pay the seller in the same transaction (`confirmation.settlement=
 For sells choose **one** of amount, `sellPercent` (integer 1–100) or `sellAll:true`; mixed modes return `SELL_AMOUNT_MODE_INVALID`. Percentages use integer arithmetic and round down. Selling pays the seller directly in the pool's quote asset (`confirmation.settlement=direct`); there is no separate withdrawal.
 
 The prepare response also contains integer fields: `amountInWei`, `minOutWei`, `quote.outWei`, `quote.feeWei`, `quote.refundWei`, `transaction.valueWei`, `buildId` and `expiresAt`.
+
+**Buys near graduation:** every buy returns `confirmation.finalFill`. With `acceptRemainder:true`, `minOutWei` is `1`: if other buys land first and leave less than this quote, the pool sells this buyer only the remaining shares and completes graduation in the same transaction instead of reverting. Any fill's average price stays within `worstPremiumBps` (at most `maxPremiumBps`: 5% by default, or the user's explicit slippage) above the quote, because no share costs more than the curve's last share; unused funds are not spent (BNB is refunded in the same transaction). Show `finalFill.notice` in the single confirmation, forward the preview `gasLimit`, and do not treat `minOutWei:1` as an error or raise slippage. With `acceptRemainder:false` the ordinary share minimum applies and a shortfall reverts, costing only gas.
+
+**Completing graduation.** `GET /api/agent/resolve/{ca}` returns `graduation` (token detail: `graduationFill`) with `remainingSharesWei` and `fillAmountWei`, the exact single-buy amount including the 0.2% fee that completes graduation (one wallet holds at most 20M shares). When the user is trading a pool whose remainder is small, say once how much more completes graduation; never buy on your own initiative. A server-set `gasLimit` belongs to the transaction the user confirms: state it in the single confirmation (for example "gasLimit 10,000,000 reserved for graduation; only gas used is charged"), so that confirmation is the user's explicit request the wallet skill requires before passing `--gasLimit` on preview. A graduating buy creates the Flap token and DEX pool, so the wallet may treat it differently: if preview is intercepted (`AGENT_DEV_MODE_RISK_BLOCKED`), report the block and reason and do not bypass it or alter calldata; if execute returns `PENDING_CONFIRMATION`, tell the user at once to approve it in the Binance App because the remainder can be taken by others, then poll the order; if preview fails with simulation error `351805` because the pool moved, rebuild once with a new idempotency key and preview again rather than looping.
 
 It also returns `safety`, `confirmation`, `walletPreview` and `quoteRefreshAt`. Omit safety overrides in normal requests. When recovering by `GET /api/builds/{id}` or repeating an idempotent request, follow `next.step`: `preview`, `rebuild` or `poll`; a returned `txHash` must never be signed or submitted again. Idempotency protects preparation, not wallet execution: save the wallet request/order ID and transaction hash locally before any retry.
 
