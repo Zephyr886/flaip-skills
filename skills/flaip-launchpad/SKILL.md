@@ -84,7 +84,7 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 识别“领取代币 0x…”、“领取 0x… 到 0x收款钱包”等明确意图，**不再问买卖方向或领取数量**，默认领取该持有钱包全部未领取份额对应的代币。CA 接受已核验的内盘池或正式 Flap CA，先 resolve 得到 `pool`、`tokenAddress` 和 `position`。持有钱包默认当前能签名的钱包；只将确实缺失/含糊的 CA、钱包连接或收款地址一次补问。
 
 1. 先恢复本次领取/转出的已有订单和哈希；有 hash 只跟进。核对链 56、工厂映射及 `position.requiresClaim`；未迁移就告知尚不能领取，无份额或已领取不重复构建。领取无需 Agent ID、买入或 ERC20 approve。
-2. 默认领取到持有钱包。调用 `POST /api/transactions/prepare`，传 `{"from":"持有钱包","action":"claim","pool":"resolve得到的池地址"}`；接口编码 `claimFor(from)`，value=0。完成钱包预览，将真实池/Flap CA、可核验的领取金额与余款、收款地址和 Gas 合并确认一次，再执行并保存 orderId/hash，自动跟进结果。
+2. 默认领取到持有钱包。调用 `POST /api/transactions/prepare`，传 `{"from":"持有钱包","action":"claim","pool":"resolve得到的池地址"}`；接口编码 `claimFor(from)`，value=0。resolve 的 `position.sharesWei` 是份额，不是钱包代币余额；可领取数量按链上 `distributableTokens × sharesWei ÷ finalShares` 用整数向下取整核验，余款同理，不编造接口字段。完成钱包预览，将真实池/Flap CA、可核验的领取金额与余款、收款地址和 Gas 合并确认一次，再执行并保存 orderId/hash，自动跟进结果。
 3. 成功回执后用 resolve/真实代币余额核验 `claimed` 和**本次净到账**，再报告已领取。广播中只说已提交；迁移成功不能当作领取成功。BNB 底池待提余款另行说明 withdraw。
 
 ### 指定另一收款钱包
