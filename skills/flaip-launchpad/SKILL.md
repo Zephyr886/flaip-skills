@@ -21,6 +21,8 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 
 ## 首次使用
 
+尚未安装 FLAIP 技能时运行 `npx skills add Zephyr886/flaip-skills`；已安装可跳过。无法运行 npx 时直接读取本指南（`https://flaip.xyz/agent-quickstart.md`），按下述相同规则完成创建或交易。
+
 使用官方 binance-agentic-wallet 技能确认钱包已连接，取得自己能签名的地址。
 自定义合约调用要求币安 App 中的 Developer Mode 已开启；读取 wallet settings 检查，不替用户修改设置。
 创建和内盘买卖要求签名地址持有官方 .ai Agent ID，并有 BNB 支付 gas；QQQB/BNCB 底池还需持有足够的该报价币。
@@ -37,6 +39,7 @@ API 根地址：`https://flaip.xyz`，以下路径都相对于它。网络 BSC 5
 4. **是否首购、购买多少**：创建时是否购买？若买，按所选报价币买多少（BNB/QQQB/BNCB）？不买明确记为 0；仅创建首购不限购。
 
 名称未给也一并补问。名称已给时可派生符号；描述、社交、税率、Gas 与滑点等普通设置沿用默认，不逐项问。
+用户已给出正数首购金额，就已明确同意首购，不再询问是否购买；金额单位必须与所选底池报价币一致，单位或金额尚未明确时一并补问。
 不得用随机头像、BNB 底池、marketing 或 0 首购静默代替这些答案。缺失时接口返回 LAUNCH_CHOICES_REQUIRED 与 missing/questions，先补齐再构建；不上传元数据、不创建草稿。
 
 答案齐全后一次调用 POST /api/agent/quick-launch。以下仅示意用户已选的答案，不是默认：

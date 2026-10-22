@@ -69,6 +69,8 @@ Ask only for missing information, together:
 
 These decisions are required in both quick and exact modes. A name alone is not sufficient. Do not ask again when the user already supplied an answer, but never silently substitute a random avatar, BNB, marketing, or zero buy. Missing choices return LAUNCH_CHOICES_REQUIRED with missing/questions before uploads or transaction construction.
 
+A positive initial purchase amount already answers whether to buy; do not ask that question again. The amount must be in the selected quote asset. Ask only if its amount or unit is still unclear.
+
 Descriptions, social links, tax rates, beneficiary and minimum dividend balance may use ordinary defaults. Default trading slippage, fees and gas remain unchanged. Present the selected creation configuration and wallet risks in one final confirmation. A zero initial buy costs only gas; only use zero when explicitly declined.
 
 Never invent token content. The name, symbol, image, description, links and tax parameters are frozen on chain and cannot be edited later.
